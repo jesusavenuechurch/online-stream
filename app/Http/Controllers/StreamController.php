@@ -13,26 +13,44 @@ class StreamController extends Controller
     /**
      * Show the stream page
      */
-    public function show(Request $request, StreamEvent $event)
+   public function show(Request $request, StreamEvent $event)
     {
         $attendeeId = Session::get('attendee_id');
         $sessionEventId = Session::get('event_id');
 
-        // 1. Check if user is authenticated for this event
-        if (!$attendeeId || (int)$sessionEventId !== (int)$event->id) {
+        // 1. Check if user is authenticated for ANY event
+        if (!$attendeeId) {
             return view('stream.auth', compact('event'));
         }
 
         $attendee = Attendee::find($attendeeId);
 
-        // 2. Safety check: If attendee doesn't exist or doesn't have pastor access
-        if (!$attendee || ($event->isPastorsOnly() && !$attendee->isPastor())) {
+        // 2. Safety check
+        if (!$attendee) {
             Session::forget(['attendee_id', 'event_id']);
             return redirect('/')->with('error', 'Access denied.');
         }
 
-        // 3. SMART SESSION MANAGEMENT
-        // Added 'joined_at' to prevent SQLSTATE[HY000] General error: 1364
+        // 3. **SMART REDIRECT: Always show the LIVE event if one exists**
+        $liveEvent = StreamEvent::where('status', 'live')->first();
+        
+        if ($liveEvent && $liveEvent->id !== $event->id) {
+            // There's a different live event - redirect to it
+            // Update session to new event
+            Session::put('event_id', $liveEvent->id);
+            return redirect()->route('stream.show', $liveEvent);
+        }
+
+        // 4. Check pastor access (only if this is the event they're trying to watch)
+        if ($event->isPastorsOnly() && !$attendee->isPastor()) {
+            Session::forget(['attendee_id', 'event_id']);
+            return redirect('/')->with('error', 'This stream is for pastors only.');
+        }
+
+        // 5. Update session to this event (in case they registered for a different one)
+        Session::put('event_id', $event->id);
+
+        // 6. Record attendance
         Attendance::updateOrCreate(
             [
                 'event_id' => $event->id,
@@ -40,7 +58,7 @@ class StreamController extends Controller
                 'left_at' => null, 
             ],
             [
-                'joined_at' => now(), // Critical fix: provides the missing field value
+                'joined_at' => now(),
                 'last_ping' => now(), 
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
@@ -48,7 +66,7 @@ class StreamController extends Controller
             ]
         );
 
-        // 4. Get stream URL
+        // 7. Get stream URL
         $streamUrl = $this->getStreamUrl($event);
 
         return view('stream.player', compact('event', 'attendee', 'streamUrl'));
