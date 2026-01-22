@@ -25,18 +25,14 @@
 <body class="text-slate-200 min-h-screen flex flex-col">
 
     <nav class="flex justify-between items-center px-8 py-6 max-w-7xl mx-auto w-full">
-        <div class="flex items-center space-x-2">
-            <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-            </div>
-            <span class="text-xl font-extrabold tracking-tight text-white italic">CE<span class="text-blue-500">LIVE</span></span>
+        <div class="flex items-center">
+            <img src="{{ asset('img/logo.jpeg') }}" alt="Christ Embassy Southern Africa" class="h-12 md:h-14 w-auto object-contain">
         </div>
         
         <div class="flex items-center space-x-6">
             @if(!Session::has('attendee_id'))
                 @if($liveEvent)
-                    {{-- Changed from stream.auth to stream.show to align with your routes --}}
-                    <a href="{{ route('stream.show', $liveEvent) }}" class="text-sm font-semibold text-white bg-white/5 hover:bg-white/10 px-5 py-2.5 rounded-xl border border-white/10 transition">Sign In</a>
+                    <a href="{{ route('stream.show', $liveEvent) }}" class="text-sm font-semibold text-white bg-white/5 hover:bg-white/10 px-6 py-2.5 rounded-xl border border-white/10 transition">Sign In</a>
                 @endif
             @else
                 <a href="/admin" class="text-sm font-medium text-slate-400 hover:text-white transition">Admin Dashboard →</a>
@@ -94,8 +90,7 @@
                 
                 @if(!Session::has('attendee_id'))
                 <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-                    {{-- Generic links since no specific event is active --}}
-                    <p class="text-slate-500 italic">Check back later for our next service.</p>
+                    <p class="text-slate-500 italic font-medium">Check back later for our next service.</p>
                 </div>
                 @endif
             </div>
@@ -103,8 +98,8 @@
 
     </main>
 
-    <footer class="py-10 text-center text-slate-600 text-[11px] font-bold uppercase tracking-widest mt-auto">
-        &copy; {{ date('Y') }} CE LIVE
+    <footer class="py-10 text-center text-slate-600 text-[10px] font-bold uppercase tracking-[0.2em] mt-auto">
+        &copy; {{ date('Y') }} Christ Embassy Southern Africa
     </footer>
 
 </body>
