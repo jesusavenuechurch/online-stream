@@ -96,12 +96,15 @@ class StreamController extends Controller
     private function getStreamUrl(StreamEvent $event): ?string
     {
         if ($event->isLive()) {
-            // Use the fixed HLS URL from config
-            return config('streaming.hls_url') . '/stream.m3u8';
+            $settings = \App\Models\StreamSettings::current();
+            if ($settings && $settings->stream_key) {
+                // Return URL with actual stream key
+                return asset('storage/hls/' . $settings->stream_key . '.m3u8');
+            }
         }
         
         if ($event->recording_path) {
-            return config('streaming.recordings_url') . '/' . basename($event->recording_path);
+            return asset('storage/' . $event->recording_path);
         }
         
         return null;

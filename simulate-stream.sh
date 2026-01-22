@@ -2,8 +2,8 @@
 
 # Church Stream - Mac Video Simulator with Debug
 
-RTMP_URL="rtmp://localhost/live"
-STREAM_KEY="stream_uLVfexUkPebhV9JdSwQvF9L1kDso0Isy"
+RTMP_URL="rtmp://stream.cesouthernafrica.co.za/live"
+STREAM_KEY="stream_eoEkaKYzdY39z3jWg9uLu4LIZRJOrHnx"
 VIDEO_FILE="$1"
 
 echo "=========================================="
