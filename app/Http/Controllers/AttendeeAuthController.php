@@ -53,7 +53,6 @@ class AttendeeAuthController extends Controller
      */
     public function register(Request $request, StreamEvent $event)
     {
-        // 1. Validate with custom messages
         $validator = Validator::make($request->all(), [
             'title'      => 'required|string',
             'first_name' => 'required|string|max:255',
@@ -62,41 +61,33 @@ class AttendeeAuthController extends Controller
             'zone_id'    => 'required|exists:zones,id',
             'group_id'   => 'required|exists:groups,id',
             'type'       => 'required|in:pastor,member',
-        ], [
-            'username.unique' => 'This username is already taken. Try signing in or use a different one.'
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'message' => $validator->errors()->first()
-            ], 422);
+            return response()->json(['message' => $validator->errors()->first()], 422);
         }
 
-        // 2. Create attendee
-        try {
-            $attendee = Attendee::create([
-                'title'       => $request->title,
-                'first_name'  => $request->first_name,
-                'last_name'   => $request->last_name,
-                'username'    => $request->username,
-                'zone_id'     => $request->zone_id,
-                'group_id'    => $request->group_id,
-                'type'        => $request->type,
-                'email'       => $request->email,
-                'phone'       => $request->phone,
-            ]);
+        $attendee = Attendee::create([
+            'title'       => $request->title,
+            'first_name'  => $request->first_name,
+            'last_name'   => $request->last_name,
+            'username'    => $request->username,
+            'zone_id'     => $request->zone_id,
+            'group_id'    => $request->group_id,
+            'type'        => $request->type,
+        ]);
 
-            // 3. Set Session
-            Session::put('attendee_id', $attendee->id);
-            Session::put('event_id', $event->id);
+        Session::put('attendee_id', $attendee->id);
+        Session::put('event_id', $event->id);
 
-            return response()->json([
-                'success' => true,
-                'redirect' => route('stream.show', $event),
-            ]);
+        // LOGIC: Is the stream actually live right now?
+        $isLive = $event->isLive() || $event->recording_path;
 
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Database error. Please try again.'], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'is_live' => $isLive,
+            'redirect' => $isLive ? route('stream.show', $event) : null,
+            'message' => $isLive ? 'Joining...' : 'Registration Successful!'
+        ]);
     }
 }
