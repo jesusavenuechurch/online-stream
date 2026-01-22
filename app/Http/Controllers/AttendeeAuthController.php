@@ -6,49 +6,39 @@ use App\Models\Attendee;
 use App\Models\StreamEvent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Validator;
 
 class AttendeeAuthController extends Controller
 {
     /**
-     * Check if username exists
-     */
-    public function checkUsername(Request $request)
-    {
-        $request->validate([
-            'username' => 'required|string',
-        ]);
-
-        $attendee = Attendee::where('username', $request->username)->first();
-
-        return response()->json([
-            'exists' => (bool) $attendee,
-            'attendee' => $attendee ? [
-                'first_name' => $attendee->first_name,
-                'last_name' => $attendee->last_name,
-                'type' => $attendee->type,
-            ] : null,
-        ]);
-    }
-
-    /**
      * Authenticate existing attendee
+     * No more generic validation errors - we send clear messages for stubborn users.
      */
     public function authenticate(Request $request, StreamEvent $event)
     {
-        $request->validate([
-            'username' => 'required|string|exists:attendees,username',
-        ]);
+        // 1. Validate that something was entered
+        if (!$request->username) {
+            return response()->json(['message' => 'Please enter a username.'], 422);
+        }
 
-        $attendee = Attendee::where('username', $request->username)->firstOrFail();
+        // 2. Look for the user
+        $attendee = Attendee::where('username', $request->username)->first();
 
-        // Pastor-only check
+        // 3. Clear error if user doesn't exist
+        if (!$attendee) {
+            return response()->json([
+                'message' => 'This username is not registered yet. Please click the Register tab to create an account.'
+            ], 404);
+        }
+
+        // 4. Pastor-only check
         if ($event->isPastorsOnly() && !$attendee->isPastor()) {
             return response()->json([
-                'message' => 'This stream is for pastors only.'
+                'message' => 'This event is restricted to Pastors only.'
             ], 403);
         }
 
+        // 5. Success - Set Session
         Session::put('attendee_id', $attendee->id);
         Session::put('event_id', $event->id);
 
@@ -59,11 +49,12 @@ class AttendeeAuthController extends Controller
     }
 
     /**
-     * Register new attendee with Zone and Group
+     * Register new attendee
      */
     public function register(Request $request, StreamEvent $event)
     {
-        $validated = $request->validate([
+        // 1. Validate with custom messages
+        $validator = Validator::make($request->all(), [
             'title'      => 'required|string',
             'first_name' => 'required|string|max:255',
             'last_name'  => 'required|string|max:255',
@@ -71,34 +62,41 @@ class AttendeeAuthController extends Controller
             'zone_id'    => 'required|exists:zones,id',
             'group_id'   => 'required|exists:groups,id',
             'type'       => 'required|in:pastor,member',
+        ], [
+            'username.unique' => 'This username is already taken. Try signing in or use a different one.'
         ]);
 
-        // Create attendee using the new model fields
-        $attendee = Attendee::create([
-            'title'       => $validated['title'],
-            'first_name'  => $validated['first_name'],
-            'last_name'   => $validated['last_name'],
-            'username'    => $validated['username'],
-            'zone_id'     => $validated['zone_id'],
-            'group_id'    => $validated['group_id'],
-            'type'        => $validated['type'],
-            // Optional fields if you still want them
-            'email'       => $request->email,
-            'phone'       => $request->phone,
-            'church_name' => $request->church_name,
-        ]);
-
-        // Double check pastor permissions if they just registered for a pastor-only event
-        if ($event->isPastorsOnly() && !$attendee->isPastor()) {
-            return response()->json(['message' => 'Unauthorized type for this event.'], 403);
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first()
+            ], 422);
         }
 
-        Session::put('attendee_id', $attendee->id);
-        Session::put('event_id', $event->id);
+        // 2. Create attendee
+        try {
+            $attendee = Attendee::create([
+                'title'       => $request->title,
+                'first_name'  => $request->first_name,
+                'last_name'   => $request->last_name,
+                'username'    => $request->username,
+                'zone_id'     => $request->zone_id,
+                'group_id'    => $request->group_id,
+                'type'        => $request->type,
+                'email'       => $request->email,
+                'phone'       => $request->phone,
+            ]);
 
-        return response()->json([
-            'success' => true,
-            'redirect' => route('stream.show', $event),
-        ]);
+            // 3. Set Session
+            Session::put('attendee_id', $attendee->id);
+            Session::put('event_id', $event->id);
+
+            return response()->json([
+                'success' => true,
+                'redirect' => route('stream.show', $event),
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Database error. Please try again.'], 500);
+        }
     }
 }

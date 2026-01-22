@@ -19,6 +19,7 @@ class Attendance extends Model
         'left_at',
         'ip_address',
         'user_agent',
+        'session_id',
     ];
 
     protected $casts = [

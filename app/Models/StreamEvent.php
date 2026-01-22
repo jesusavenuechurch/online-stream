@@ -75,8 +75,11 @@ class StreamEvent extends Model
 
     public function getCurrentViewersCount(): int
     {
+        // A user is only "current" if they haven't manually left 
+        // AND they have pinged the server within the last 60 seconds.
         return $this->attendance()
             ->whereNull('left_at')
+            ->where('last_ping', '>=', now()->subSeconds(60))
             ->count();
     }
 

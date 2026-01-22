@@ -1,3 +1,13 @@
+@php
+    $liveEvents = \App\Models\StreamEvent::where('status', 'live')->get();
+    $upcomingEvents = \App\Models\StreamEvent::where('status', 'scheduled')
+        ->orderBy('created_at', 'desc')
+        ->limit(3)
+        ->get();
+    
+    // Pick the first live event for the hero and links
+    $liveEvent = $liveEvents->first();
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,110 +17,95 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; }
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .live-glow { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+        .live-glow { box-shadow: 0 0 40px rgba(37, 99, 235, 0.15); }
     </style>
 </head>
-<body class="bg-[#0f172a] text-slate-200 min-h-screen">
+<body class="text-slate-200 min-h-screen flex flex-col">
 
-    <nav class="flex justify-between items-center px-8 py-6 max-w-7xl mx-auto">
+    <nav class="flex justify-between items-center px-8 py-6 max-w-7xl mx-auto w-full">
         <div class="flex items-center space-x-2">
             <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
             </div>
             <span class="text-xl font-extrabold tracking-tight text-white italic">CE<span class="text-blue-500">LIVE</span></span>
         </div>
-        <a href="/admin" class="text-sm font-medium text-slate-400 hover:text-white transition">Admin →</a>
+        
+        <div class="flex items-center space-x-6">
+            @if(!Session::has('attendee_id'))
+                @if($liveEvent)
+                    {{-- Changed from stream.auth to stream.show to align with your routes --}}
+                    <a href="{{ route('stream.show', $liveEvent) }}" class="text-sm font-semibold text-white bg-white/5 hover:bg-white/10 px-5 py-2.5 rounded-xl border border-white/10 transition">Sign In</a>
+                @endif
+            @else
+                <a href="/admin" class="text-sm font-medium text-slate-400 hover:text-white transition">Admin Dashboard →</a>
+            @endif
+        </div>
     </nav>
 
-    <main class="max-w-7xl mx-auto px-6 pb-20">
-        
-        <header class="py-12 md:py-20 text-center">
-            <h1 class="text-5xl md:text-7xl font-extrabold text-white mb-6 tracking-tighter">
-                Experience the <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">Service Online.</span>
-            </h1>
-            <p class="text-lg text-slate-400 max-w-2xl mx-auto">
-                Join our global community in worship and word. Real-time streaming for every believer, everywhere.
-            </p>
-        </header>
+    <main class="max-w-6xl mx-auto px-6 flex-grow flex flex-col justify-center w-full">
 
-        @php
-            $liveEvents = \App\Models\StreamEvent::where('status', 'live')->get();
-            $upcomingEvents = \App\Models\StreamEvent::where('status', 'scheduled')->orderBy('created_at', 'desc')->limit(3)->get();
-        @endphp
-
-        @if($liveEvents->count() > 0)
-            <section class="mb-16">
-                <div class="flex items-center space-x-3 mb-8">
-                    <span class="relative flex h-3 w-3">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                    </span>
-                    <h2 class="text-sm font-bold uppercase tracking-widest text-red-500">Live Now</h2>
-                </div>
-
-                <div class="grid gap-8">
-                    @foreach($liveEvents as $event)
-                        <div class="group relative bg-slate-800/50 rounded-3xl overflow-hidden border border-slate-700 hover:border-blue-500/50 transition-all duration-500 live-glow">
-                            <div class="md:flex">
-                                <div class="md:w-1/2 bg-slate-900 aspect-video relative overflow-hidden">
-                                    <div class="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-purple-600/20"></div>
-                                    <div class="absolute inset-0 flex items-center justify-center">
-                                        <div class="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md group-hover:scale-110 transition-transform">
-                                            <svg class="w-8 h-8 text-white fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="p-8 md:w-1/2 flex flex-col justify-center">
-                                    <div class="flex items-center space-x-2 mb-4">
-                                        @if($event->isPastorsOnly())
-                                            <span class="px-3 py-1 bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase rounded-full border border-amber-500/20">🔒 Pastors Only</span>
-                                        @else
-                                            <span class="px-3 py-1 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase rounded-full border border-emerald-500/20">🌐 Open to All</span>
-                                        @endif
-                                    </div>
-                                    <h3 class="text-3xl font-bold text-white mb-4 leading-tight">{{ $event->title }}</h3>
-                                    <p class="text-slate-400 mb-8 line-clamp-2">{{ $event->description }}</p>
-                                    
-                                    <div class="flex items-center justify-between mt-auto">
-                                        <div class="text-sm text-slate-500">
-                                            <strong class="text-white">{{ $event->getCurrentViewersCount() }}</strong> People Watching
-                                        </div>
-                                        <a href="{{ route('stream.show', $event) }}" class="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20">
-                                            Join Meeting
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
+        @if($liveEvent)
+            <div class="group relative bg-slate-800/40 rounded-[2.5rem] overflow-hidden border border-white/5 transition-all duration-500 live-glow mt-8">
+                <div class="md:flex items-stretch">
+                    <div class="md:w-3/5 bg-slate-900 aspect-video relative overflow-hidden">
+                        <div class="absolute inset-0 bg-gradient-to-br from-blue-600/10 to-transparent"></div>
+                        <div class="absolute top-6 left-6 z-10">
+                            <span class="flex items-center px-4 py-1.5 bg-red-600 text-white rounded-full text-[10px] font-black tracking-widest uppercase animate-pulse">
+                                <span class="w-1.5 h-1.5 bg-white rounded-full mr-2"></span> LIVE
+                            </span>
                         </div>
-                    @endforeach
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <a href="{{ route('stream.show', $liveEvent) }}" class="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform duration-300">
+                                <svg class="w-10 h-10 text-white fill-current translate-x-1" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="p-10 md:w-2/5 flex flex-col justify-center bg-slate-800/20 backdrop-blur-sm">
+                        <h2 class="text-sm font-bold text-blue-500 uppercase tracking-widest mb-4">Happening Now</h2>
+                        <h3 class="text-4xl font-extrabold text-white mb-4 leading-tight tracking-tighter">{{ $liveEvent->title }}</h3>
+                        <p class="text-slate-400 mb-8 leading-relaxed font-medium line-clamp-3">{{ $liveEvent->description }}</p>
+                        
+                        <div class="flex items-center space-x-4">
+                            <a href="{{ route('stream.show', $liveEvent) }}" class="flex-grow text-center px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-xl shadow-blue-600/30">
+                                Join Experience
+                            </a>
+                        </div>
+                        <div class="mt-6 flex items-center text-slate-500 text-sm font-medium">
+                            <svg class="w-4 h-4 mr-2 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"></path></svg>
+                            {{ $liveEvent->getCurrentViewersCount() }} People Online
+                        </div>
+                    </div>
                 </div>
-            </section>
+            </div>
+        @else
+            <div class="text-center py-20 px-6">
+                <div class="w-24 h-24 bg-slate-800/50 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-white/5">
+                    <svg class="w-12 h-12 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636"></path>
+                    </svg>
+                </div>
+                <h1 class="text-4xl font-extrabold text-white tracking-tight mb-4">No Active Broadcast</h1>
+                <p class="text-slate-400 max-w-md mx-auto mb-10 leading-relaxed text-lg">
+                    We aren't live right now, but we'll be back soon!
+                </p>
+                
+                @if(!Session::has('attendee_id'))
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    {{-- Generic links since no specific event is active --}}
+                    <p class="text-slate-500 italic">Check back later for our next service.</p>
+                </div>
+                @endif
+            </div>
         @endif
 
-        <section>
-            <h2 class="text-xl font-bold text-white mb-8">Upcoming Gatherings</h2>
-            <div class="grid md:grid-cols-3 gap-6">
-                @forelse($upcomingEvents as $event)
-                    <div class="glass p-6 rounded-2xl hover:bg-white/5 transition group">
-                        <div class="text-blue-500 text-xs font-bold uppercase mb-3">Next Week</div>
-                        <h4 class="text-lg font-bold text-white mb-2 group-hover:text-blue-400 transition">{{ $event->title }}</h4>
-                        <p class="text-sm text-slate-500 mb-6 line-clamp-2">{{ $event->description }}</p>
-                        <div class="flex items-center justify-between text-[11px] font-bold tracking-widest uppercase text-slate-600">
-                            <span>Scheduled</span>
-                            <span>{{ $event->created_at->format('M d') }}</span>
-                        </div>
-                    </div>
-                @empty
-                    <div class="col-span-3 py-20 text-center glass rounded-3xl">
-                        <p class="text-slate-500 italic font-light">No other events scheduled at this time.</p>
-                    </div>
-                @endforelse
-            </div>
-        </section>
-
     </main>
+
+    <footer class="py-10 text-center text-slate-600 text-[11px] font-bold uppercase tracking-widest mt-auto">
+        &copy; {{ date('Y') }} CE LIVE
+    </footer>
 
 </body>
 </html>

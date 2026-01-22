@@ -106,7 +106,10 @@
 
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
     <script>
-        // Video.js Initialization
+        const eventId = {{ $event->id }};
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+        // 1. Video.js Initialization
         @if($streamUrl)
             const player = videojs('stream-player', {
                 fluid: true,
@@ -116,16 +119,51 @@
             });
         @endif
 
-        // Wix-style Leave Confirmation
+        // 2. Heartbeat Logic (FIXES DUPLICATE COUNTING)
+        // This tells the server "I am still here" every 30 seconds
+        async function sendHeartbeat() {
+            try {
+                await fetch(`/watch/${eventId}/heartbeat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken
+                    }
+                });
+            } catch (e) {
+                console.error("Heartbeat failed", e);
+            }
+        }
+
+        // Ping immediately on load, then every 30 seconds
+        sendHeartbeat();
+        setInterval(sendHeartbeat, 30000);
+
+        // 3. Viewer Counter UI Update
+        function updateViewers() {
+            fetch(`/api/events/${eventId}/viewers`)
+                .then(r => r.json())
+                .then(data => {
+                    // Now shows the accurate "active" count from your model
+                    document.getElementById('viewer-count').textContent = data.count.toLocaleString();
+                })
+                .catch(() => {
+                    console.log('Viewer count update failed');
+                });
+        }
+
+        updateViewers();
+        setInterval(updateViewers, 30000);
+
+        // 4. Leave Function
         async function leaveStream() {
-            const confirmed = await confirm('You are about to disconnect from the service. Continue?');
-            if (confirmed) {
+            if (confirm('You are about to disconnect from the service. Continue?')) {
                 try {
-                    await fetch(`/watch/{{ $event->id }}/leave`, {
+                    await fetch(`/watch/${eventId}/leave`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                            'X-CSRF-TOKEN': csrfToken
                         }
                     });
                 } finally {
@@ -133,21 +171,6 @@
                 }
             }
         }
-
-        // Viewer Counter Logic
-        function updateViewers() {
-            fetch(`/api/events/{{ $event->id }}/viewers`)
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById('viewer-count').textContent = data.count.toLocaleString();
-                })
-                .catch(() => {
-                    document.getElementById('viewer-count').textContent = '{{ rand(5, 15) }}'; // Fallback
-                });
-        }
-
-        updateViewers();
-        setInterval(updateViewers, 30000);
     </script>
 </body>
 </html>

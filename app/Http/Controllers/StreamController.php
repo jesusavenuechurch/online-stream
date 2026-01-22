@@ -18,48 +18,57 @@ class StreamController extends Controller
         $attendeeId = Session::get('attendee_id');
         $sessionEventId = Session::get('event_id');
 
-        // Check if user is authenticated for this event
-        if (!$attendeeId || $sessionEventId != $event->id) {
+        // 1. Check if user is authenticated for this event
+        if (!$attendeeId || (int)$sessionEventId !== (int)$event->id) {
             return view('stream.auth', compact('event'));
         }
 
-        $attendee = Attendee::findOrFail($attendeeId);
+        $attendee = Attendee::find($attendeeId);
 
-        // Verify access permissions
-        if ($event->isPastorsOnly() && !$attendee->isPastor()) {
+        // 2. Safety check: If attendee doesn't exist or doesn't have pastor access
+        if (!$attendee || ($event->isPastorsOnly() && !$attendee->isPastor())) {
             Session::forget(['attendee_id', 'event_id']);
-            return redirect()->route('stream.show', $event)
-                ->with('error', 'This stream is for pastors only.');
+            return redirect('/')->with('error', 'Access denied.');
         }
 
-        // Check for existing active session
-        $existingSession = Attendance::where('event_id', $event->id)
-            ->where('attendee_id', $attendee->id)
-            ->whereNull('left_at')
-            ->first();
-
-        if ($existingSession) {
-            // Check if it's the same browser session
-            if ($existingSession->session_id !== Session::getId()) {
-                return redirect()->route('stream.show', $event)
-                    ->with('error', 'You are already watching this stream in another browser. Please close that session first.');
-            }
-        } else {
-            // Create new attendance record with session tracking
-            $attendance = Attendance::create([
+        // 3. SMART SESSION MANAGEMENT
+        // Added 'joined_at' to prevent SQLSTATE[HY000] General error: 1364
+        Attendance::updateOrCreate(
+            [
                 'event_id' => $event->id,
                 'attendee_id' => $attendee->id,
-                'joined_at' => now(),
+                'left_at' => null, 
+            ],
+            [
+                'joined_at' => now(), // Critical fix: provides the missing field value
+                'last_ping' => now(), 
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
-                'session_id' => Session::getId(), // Add this field
-            ]);
-        }
+                'session_id' => Session::getId(),
+            ]
+        );
 
-        // Get stream URL (HLS)
+        // 4. Get stream URL
         $streamUrl = $this->getStreamUrl($event);
 
         return view('stream.player', compact('event', 'attendee', 'streamUrl'));
+    }
+
+    /**
+     * Heartbeat: Called via JS every 30 seconds
+     */
+    public function heartbeat(Request $request, StreamEvent $event)
+    {
+        $attendeeId = Session::get('attendee_id');
+
+        if ($attendeeId) {
+            Attendance::where('event_id', $event->id)
+                ->where('attendee_id', $attendeeId)
+                ->whereNull('left_at')
+                ->update(['last_ping' => now()]);
+        }
+
+        return response()->json(['status' => 'active']);
     }
 
     /**
@@ -86,16 +95,13 @@ class StreamController extends Controller
      */
     private function getStreamUrl(StreamEvent $event): ?string
     {
-        // If event is live, return live stream URL with the actual stream key
         if ($event->isLive()) {
             $settings = \App\Models\StreamSettings::current();
             if ($settings && $settings->stream_key) {
-                // Point to Laravel storage URL, not nginx
                 return asset('storage/hls/' . $settings->stream_key . '.m3u8');
             }
         }
         
-        // If event has ended and has recording, return recording URL
         if ($event->recording_path) {
             return asset('storage/' . $event->recording_path);
         }

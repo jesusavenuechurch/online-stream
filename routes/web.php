@@ -13,6 +13,7 @@ Route::get('/watch/{event}', [StreamController::class, 'show'])->name('stream.sh
 Route::post('/watch/{event}/authenticate', [AttendeeAuthController::class, 'authenticate'])->name('attendee.authenticate');
 Route::post('/watch/{event}/register', [AttendeeAuthController::class, 'register'])->name('attendee.register');
 Route::post('/watch/{event}/leave', [StreamController::class, 'leave'])->name('stream.leave');
+Route::post('/watch/{event}/heartbeat', [StreamController::class, 'heartbeat'])->name('stream.heartbeat');
 
 // Check if username exists (for UX)
 Route::post('/check-username', [AttendeeAuthController::class, 'checkUsername'])->name('attendee.check-username');
