@@ -98,6 +98,8 @@
                             <select id="reg-title" class="input-dark w-full px-4 py-3 rounded-xl appearance-none cursor-pointer">
                                 <option value="Brother">Brother</option>
                                 <option value="Sister">Sister</option>
+                                <option value="Deacon">Pastor</option>
+                                <option value="Deaconess">Pastor</option>
                                 <option value="Pastor">Pastor</option>
                             </select>
                         </div>
