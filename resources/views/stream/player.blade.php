@@ -43,9 +43,10 @@
                     </span>
                 @endif
                 
-                <button onclick="leaveStream()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium transition-all border border-white/5">
-                    Leave
-                </button>
+            <button onclick="window.location.href='https://www.cesouthernafrica.co.za'" 
+                    class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium transition-all border border-white/5">
+                Leave
+            </button>
             </div>
         </div>
     </header>
