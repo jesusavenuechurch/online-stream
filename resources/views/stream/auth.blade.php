@@ -93,37 +93,42 @@
                 </div>
 
                 <div id="form-register" class="hidden space-y-4 fade-in">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="relative">
-                            <select id="reg-title" class="input-dark w-full px-4 py-3 rounded-xl appearance-none cursor-pointer">
-                                <option value="">Title</option>
-                                <option value="Brother">Brother</option>
-                                <option value="Sister">Sister</option>
-                                <option value="Deacon">Deacon</option>
-                                <option value="Deaconess">Deaconess</option>
-                                <option value="Pastor">Pastor</option>
-                            </select>
-                        </div>
-                        <input type="text" id="reg-username" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="Username/Email">
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <input type="text" id="reg-first" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="First Name">
-                        <input type="text" id="reg-last" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="Last Name">
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <select id="reg-zone" onchange="updateGroups()" class="input-dark w-full px-4 py-3 rounded-xl cursor-pointer">
-                            <option value="">Select Zone</option>
-                            @foreach(\App\Models\Zone::all() as $zone)
-                                <option value="{{ $zone->id }}">{{ $zone->name }}</option>
-                            @endforeach
-                        </select>
-                        <select id="reg-group" class="input-dark w-full px-4 py-3 rounded-xl cursor-pointer">
-                            <option value="">Select Group</option>
-                        </select>
-                    </div>
-                    <div id="reg-error" class="hidden text-red-400 text-sm text-center bg-red-400/10 py-2 rounded-lg"></div>
-                    <button onclick="register()" id="reg-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold transition-all transform active:scale-[0.98]">Register Now</button>
-                </div>
+    <div class="grid grid-cols-2 gap-4">
+        <div class="relative">
+            <select id="reg-title" class="input-dark w-full px-4 py-3 rounded-xl appearance-none cursor-pointer">
+                <option value="">Title*</option>
+                <option value="Brother">Brother</option>
+                <option value="Sister">Sister</option>
+                <option value="Deacon">Deacon</option>
+                <option value="Deaconess">Deaconess</option>
+                <option value="Pastor">Pastor</option>
+            </select>
+        </div>
+        <input type="text" id="reg-username" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="Username*">
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+        <input type="text" id="reg-first" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="First Name*">
+        <input type="text" id="reg-last" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="Last Name*">
+    </div>
+    
+    <!-- NEW: Email & Phone Fields -->
+    <input type="email" id="reg-email" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="Email Address*">
+    <input type="tel" id="reg-phone" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="Phone Number*">
+    
+    <div class="grid grid-cols-2 gap-4">
+        <select id="reg-zone" onchange="updateGroups()" class="input-dark w-full px-4 py-3 rounded-xl cursor-pointer">
+            <option value="">Select Zone*</option>
+            @foreach(\App\Models\Zone::all() as $zone)
+                <option value="{{ $zone->id }}">{{ $zone->name }}</option>
+            @endforeach
+        </select>
+        <select id="reg-group" class="input-dark w-full px-4 py-3 rounded-xl cursor-pointer">
+            <option value="">Select Group*</option>
+        </select>
+    </div>
+    <div id="reg-error" class="hidden text-red-400 text-sm text-center bg-red-400/10 py-2 rounded-lg"></div>
+    <button onclick="register()" id="reg-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold transition-all transform active:scale-[0.98]">Register Now</button>
+</div>
             </div>
         </div>
     </div>
@@ -207,55 +212,58 @@
         }
     }
 
-    async function register() {
-        const btn = document.getElementById('reg-btn');
-        const payload = {
-            title: document.getElementById('reg-title').value,
-            username: document.getElementById('reg-username').value.trim(),
-            first_name: document.getElementById('reg-first').value.trim(),
-            last_name: document.getElementById('reg-last').value.trim(),
-            zone_id: document.getElementById('reg-zone').value,
-            group_id: document.getElementById('reg-group').value,
-            type: '{{ $event->isPastorsOnly() ? "pastor" : "member" }}'
-        };
+   async function register() {
+    const btn = document.getElementById('reg-btn');
+    const payload = {
+        title: document.getElementById('reg-title').value,
+        username: document.getElementById('reg-username').value.trim(),
+        first_name: document.getElementById('reg-first').value.trim(),
+        last_name: document.getElementById('reg-last').value.trim(),
+        email: document.getElementById('reg-email').value.trim(),  // NEW
+        phone: document.getElementById('reg-phone').value.trim(),  // NEW
+        zone_id: document.getElementById('reg-zone').value,
+        group_id: document.getElementById('reg-group').value,
+        type: '{{ $event->isPastorsOnly() ? "pastor" : "member" }}'
+    };
 
-        if(!payload.username || !payload.first_name || !payload.zone_id) {
-            const errEl = document.getElementById('reg-error');
-            errEl.textContent = "Please fill in all required fields";
-            errEl.classList.remove('hidden');
-            return;
-        }
+    // Updated validation
+    if(!payload.username || !payload.first_name || !payload.email || !payload.phone || !payload.zone_id) {
+        const errEl = document.getElementById('reg-error');
+        errEl.textContent = "Please fill in all required fields (*)";
+        errEl.classList.remove('hidden');
+        return;
+    }
 
-        btn.disabled = true;
-        btn.innerHTML = `<span class="flex items-center justify-center"><svg class="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Registering...</span>`;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="flex items-center justify-center"><svg class="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Registering...</span>`;
 
-        try {
-            const response = await fetch(window.location.origin + `/watch/${eventId}/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await response.json();
+    try {
+        const response = await fetch(window.location.origin + `/watch/${eventId}/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
 
-            if (response.ok) {
-                if (data.is_live) {
-                    window.location.href = data.redirect;
-                } else {
-                    document.getElementById('auth-content').classList.add('hidden');
-                    document.getElementById('registration-success').classList.remove('hidden');
-                }
+        if (response.ok) {
+            if (data.is_live) {
+                window.location.href = data.redirect;
             } else {
-                const errEl = document.getElementById('reg-error');
-                errEl.textContent = data.message || "An error occurred";
-                errEl.classList.remove('hidden');
-                btn.disabled = false;
-                btn.textContent = "Register Now";
+                document.getElementById('auth-content').classList.add('hidden');
+                document.getElementById('registration-success').classList.remove('hidden');
             }
-        } catch (e) {
+        } else {
+            const errEl = document.getElementById('reg-error');
+            errEl.textContent = data.message || "An error occurred";
+            errEl.classList.remove('hidden');
             btn.disabled = false;
             btn.textContent = "Register Now";
         }
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "Register Now";
     }
+}
 
     // Enter key support
     window.addEventListener('DOMContentLoaded', () => {
