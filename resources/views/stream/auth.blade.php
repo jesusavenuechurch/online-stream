@@ -85,7 +85,7 @@
 
                 <div id="form-login" class="space-y-6 fade-in">
                     <div>
-                        <input type="text" id="login-username" class="input-dark w-full px-5 py-4 rounded-xl text-center text-lg" placeholder="Username">
+                        <input type="text" id="login-username" class="input-dark w-full px-5 py-4 rounded-xl text-center text-lg" placeholder="Username/Email">
                     </div>
                     <div id="login-error" class="hidden text-red-400 text-sm text-center bg-red-400/10 py-2 rounded-lg"></div>
                     <button onclick="login()" id="login-btn" class="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-lg transition-all transform active:scale-[0.98]">Join Live Stream</button>
@@ -96,6 +96,7 @@
                     <div class="grid grid-cols-2 gap-4">
                         <div class="relative">
                             <select id="reg-title" class="input-dark w-full px-4 py-3 rounded-xl appearance-none cursor-pointer">
+                                <option value="">Title</option>
                                 <option value="Brother">Brother</option>
                                 <option value="Sister">Sister</option>
                                 <option value="Deacon">Deacon</option>
@@ -103,7 +104,7 @@
                                 <option value="Pastor">Pastor</option>
                             </select>
                         </div>
-                        <input type="text" id="reg-username" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="Username">
+                        <input type="text" id="reg-username" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="Username/Email">
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <input type="text" id="reg-first" class="input-dark w-full px-4 py-3 rounded-xl" placeholder="First Name">
