@@ -2,12 +2,11 @@
 
 namespace App\Filament\Resources\Attendees\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
+use pxlrbt\FilamentExcel\Actions\Tables\ExportAction;
+use pxlrbt\FilamentExcel\Exports\ExcelExport;
 
 class AttendeesTable
 {
@@ -82,13 +81,6 @@ class AttendeesTable
                     ->dateTime('M j, Y g:i A')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                
-                TextColumn::make('updated_at')
-                    ->label('Last Updated')
-                    ->dateTime('M j, Y g:i A')
-                    ->sortable()
-                    ->since()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 SelectFilter::make('type')
@@ -110,13 +102,14 @@ class AttendeesTable
                     ->preload()
                     ->label('Group'),
             ])
-            ->recordActions([
-                EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
+            ->headerActions([
+                // This stays! It's the button at the top right of the table.
+                ExportAction::make()
+                    ->exports([
+                        ExcelExport::make()
+                            ->fromTable()
+                            ->withFilename(date('Y-m-d') . ' - Attendees Export')
+                    ])
             ])
             ->defaultSort('created_at', 'desc');
     }
