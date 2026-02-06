@@ -3,6 +3,7 @@
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\AttendeeAuthController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AvatarController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -30,3 +31,7 @@ Route::post('/watch/{event}/leave', [StreamController::class, 'leave'])->name('s
 Route::post('/watch/{event}/heartbeat', [StreamController::class, 'heartbeat'])->name('stream.heartbeat');
 
 Route::post('/check-username', [AttendeeAuthController::class, 'checkUsername'])->name('attendee.check-username');
+
+Route::get('/avatar', [AvatarController::class, 'index'])->name('avatar.index');
+Route::get('/avatar/template', [AvatarController::class, 'getTemplate'])->name('avatar.template');
+

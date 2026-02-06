@@ -16,13 +16,28 @@ class AttendancesTable
     {
         return $table
             ->columns([
-                TextColumn::make('event.title')
-                    ->label('Event')
+                // TextColumn::make('event.title')
+                //     ->label('Event')
+                //     ->searchable()
+                //     ->sortable(),
+
+                TextColumn::make('attendee.title')
+                    ->label('Title')
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('attendee.full_name')
-                    ->label('Attendee')
+                    ->label('Full Name')
+                    ->searchable()
+                    ->sortable(),
+
+                TextColumn::make('attendee.zone.name')
+                    ->label('Zone')
+                    ->searchable()
+                    ->sortable(),
+
+                TextColumn::make('attendee.group.name')
+                    ->label('Group')
                     ->searchable()
                     ->sortable(),
 

@@ -8,6 +8,7 @@ use App\Models\StreamSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Carbon\Carbon;
 
 class RtmpController extends Controller
 {
@@ -16,7 +17,11 @@ class RtmpController extends Controller
      */
     public function validate(Request $request)
     {
-        Log::info('RTMP Validate Request', $request->all());
+        Log::info('RTMP Validate Request', [
+            'all_params' => $request->all(),
+            'headers' => $request->headers->all(),
+            'ip' => $request->ip(),
+        ]);
         
         $streamKey = $request->input('name'); // Nginx sends stream key as 'name'
         
@@ -41,7 +46,7 @@ class RtmpController extends Controller
             return response('', 403);
         }
         
-        Log::info('RTMP: Stream key validated successfully');
+        Log::info('RTMP: Stream key validated successfully', ['stream_key' => $streamKey]);
         return response('', 200);
     }
     
@@ -50,30 +55,52 @@ class RtmpController extends Controller
      */
     public function start(Request $request)
     {
-        Log::info('RTMP Stream Started', $request->all());
+        Log::info('RTMP Stream Started', [
+            'params' => $request->all(),
+            'timestamp' => now()->toDateTimeString(),
+        ]);
         
         $streamKey = $request->input('name');
         
-        // Find the most recent scheduled event and mark it as live
-        $event = StreamEvent::where('status', 'scheduled')
-            ->orderBy('created_at', 'desc')
-            ->first();
-        
-        if ($event) {
-            // Delete previous recording if retention is "until_next_stream"
-            $this->deletePreviousRecordings($event);
+        try {
+            // End any currently live streams first (cleanup)
+            $currentlyLive = StreamEvent::where('status', 'live')->get();
+            foreach ($currentlyLive as $liveEvent) {
+                Log::warning('RTMP: Found orphaned live event, cleaning up', ['event_id' => $liveEvent->id]);
+                $this->endEvent($liveEvent);
+            }
             
-            $event->update([
-                'status' => 'live',
-                'started_at' => now(),
+            // Find the most recent scheduled event and mark it as live
+            $event = StreamEvent::where('status', 'scheduled')
+                ->orderBy('created_at', 'desc')
+                ->first();
+            
+            if ($event) {
+                // Delete previous recordings if retention is "until_next_stream"
+                $this->deletePreviousRecordings($event);
+                
+                $event->update([
+                    'status' => 'live',
+                    'started_at' => now(),
+                ]);
+                
+                Log::info('RTMP: Event marked as live', [
+                    'event_id' => $event->id,
+                    'title' => $event->title,
+                ]);
+            } else {
+                Log::warning('RTMP: No scheduled event found to mark as live');
+            }
+            
+            return response('', 200);
+            
+        } catch (\Exception $e) {
+            Log::error('RTMP: Error in start handler', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
-            
-            Log::info('RTMP: Event marked as live', ['event_id' => $event->id]);
-        } else {
-            Log::warning('RTMP: No scheduled event found to mark as live');
+            return response('', 500);
         }
-        
-        return response('', 200);
     }
     
     /**
@@ -81,29 +108,61 @@ class RtmpController extends Controller
      */
     public function end(Request $request)
     {
-        Log::info('RTMP Stream Ended', $request->all());
+        Log::info('RTMP Stream Ended', [
+            'params' => $request->all(),
+            'timestamp' => now()->toDateTimeString(),
+        ]);
         
-        // Find the current live event and mark it as ended
-        $event = StreamEvent::where('status', 'live')->first();
-        
-        if ($event) {
-            $event->update([
-                'status' => 'ended',
-                'ended_at' => now(),
+        try {
+            // Find the current live event and mark it as ended
+            $event = StreamEvent::where('status', 'live')->first();
+            
+            if ($event) {
+                $this->endEvent($event);
+            } else {
+                Log::warning('RTMP: No live event found to mark as ended');
+            }
+            
+            return response('', 200);
+            
+        } catch (\Exception $e) {
+            Log::error('RTMP: Error in end handler', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
-            
-            // If recording was enabled, save the recording path
-            $this->processRecording($event);
-            
-            Log::info('RTMP: Event marked as ended', ['event_id' => $event->id]);
-            
-            // Update all active attendance records to set left_at
-            $event->attendance()
-                ->whereNull('left_at')
-                ->update(['left_at' => now()]);
+            return response('', 500);
         }
+    }
+    
+    /**
+     * End an event and clean up
+     */
+    private function endEvent(StreamEvent $event)
+    {
+        $event->update([
+            'status' => 'ended',
+            'ended_at' => now(),
+        ]);
         
-        return response('', 200);
+        // Process recording BEFORE updating attendance
+        // This gives the recording time to finish writing
+        sleep(2); // Wait 2 seconds for recording to finalize
+        $this->processRecording($event);
+        
+        Log::info('RTMP: Event marked as ended', [
+            'event_id' => $event->id,
+            'duration' => $event->started_at ? $event->started_at->diffForHumans(now(), true) : 'unknown',
+        ]);
+        
+        // Update all active attendance records to set left_at
+        $affectedRows = $event->attendance()
+            ->whereNull('left_at')
+            ->update(['left_at' => now()]);
+            
+        Log::info('RTMP: Closed attendance records', ['count' => $affectedRows]);
+        
+        // Clean up old HLS segments (optional - keeps disk clean)
+        $this->cleanupHlsSegments($event);
     }
     
     /**
@@ -111,6 +170,8 @@ class RtmpController extends Controller
      */
     private function deletePreviousRecordings(StreamEvent $currentEvent)
     {
+        Log::info('RTMP: Checking for previous recordings to delete');
+        
         // Find events with "until_next_stream" retention that have recordings
         $previousEvents = StreamEvent::where('id', '!=', $currentEvent->id)
             ->where('recording_retention', 'until_next_stream')
@@ -119,11 +180,19 @@ class RtmpController extends Controller
         
         foreach ($previousEvents as $event) {
             if ($event->recording_path && Storage::disk('public')->exists($event->recording_path)) {
-                Storage::disk('public')->delete($event->recording_path);
-                Log::info('RTMP: Deleted previous recording', [
-                    'event_id' => $event->id,
-                    'path' => $event->recording_path
-                ]);
+                try {
+                    Storage::disk('public')->delete($event->recording_path);
+                    Log::info('RTMP: Deleted previous recording', [
+                        'event_id' => $event->id,
+                        'path' => $event->recording_path,
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('RTMP: Failed to delete recording', [
+                        'event_id' => $event->id,
+                        'path' => $event->recording_path,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
             
             $event->update(['recording_path' => null]);
@@ -135,29 +204,52 @@ class RtmpController extends Controller
      */
     private function processRecording(StreamEvent $event)
     {
+        Log::info('RTMP: Processing recording for event', ['event_id' => $event->id]);
+        
         // Check if recording exists in the recordings directory
         $recordingsPath = storage_path('app/public/recordings');
         
         if (!is_dir($recordingsPath)) {
-            Log::warning('RTMP: Recordings directory does not exist');
+            Log::warning('RTMP: Recordings directory does not exist', ['path' => $recordingsPath]);
             return;
         }
         
-        // Find the most recent recording file
-        $files = glob($recordingsPath . '/*.flv');
+        // Find recording files created in the last 5 minutes
+        // This is more reliable than "most recent" across all time
+        $files = glob($recordingsPath . '/*.{flv,mp4}', GLOB_BRACE);
         
         if (empty($files)) {
-            Log::warning('RTMP: No recording file found');
+            Log::warning('RTMP: No recording files found', ['path' => $recordingsPath]);
+            return;
+        }
+        
+        // Filter files modified in last 5 minutes (likely from this stream)
+        $recentFiles = array_filter($files, function($file) {
+            return (time() - filemtime($file)) < 300; // 5 minutes
+        });
+        
+        if (empty($recentFiles)) {
+            Log::warning('RTMP: No recent recording files found');
             return;
         }
         
         // Get the most recent file
-        usort($files, function($a, $b) {
+        usort($recentFiles, function($a, $b) {
             return filemtime($b) - filemtime($a);
         });
         
-        $recordingFile = $files[0];
+        $recordingFile = $recentFiles[0];
         $filename = basename($recordingFile);
+        $filesize = filesize($recordingFile);
+        
+        // Verify file is not empty
+        if ($filesize < 1024) { // Less than 1KB is probably corrupt
+            Log::warning('RTMP: Recording file too small, likely corrupt', [
+                'file' => $filename,
+                'size' => $filesize,
+            ]);
+            return;
+        }
         
         // Update event with recording path
         $event->update([
@@ -166,13 +258,43 @@ class RtmpController extends Controller
         
         Log::info('RTMP: Recording saved', [
             'event_id' => $event->id,
-            'file' => $filename
+            'file' => $filename,
+            'size' => round($filesize / 1024 / 1024, 2) . ' MB',
         ]);
         
         // Schedule deletion based on retention policy
         if ($event->recording_retention === 'days' && $event->recording_retention_days) {
-            // You can implement a scheduled job to handle this
             Log::info('RTMP: Recording will be deleted in ' . $event->recording_retention_days . ' days');
+            // You could dispatch a job here to handle this
+            // DeleteRecordingJob::dispatch($event)->delay(now()->addDays($event->recording_retention_days));
+        }
+    }
+    
+    /**
+     * Clean up HLS segments after stream ends
+     */
+    private function cleanupHlsSegments(StreamEvent $event)
+    {
+        $settings = StreamSettings::current();
+        if (!$settings || !$settings->stream_key) {
+            return;
+        }
+        
+        $hlsPath = storage_path('app/public/hls/' . $settings->stream_key);
+        
+        if (is_dir($hlsPath)) {
+            try {
+                // Delete .ts and .m3u8 files
+                $files = glob($hlsPath . '/*.{ts,m3u8}', GLOB_BRACE);
+                foreach ($files as $file) {
+                    if (is_file($file)) {
+                        unlink($file);
+                    }
+                }
+                Log::info('RTMP: Cleaned up HLS segments', ['count' => count($files)]);
+            } catch (\Exception $e) {
+                Log::error('RTMP: Failed to clean HLS segments', ['error' => $e->getMessage()]);
+            }
         }
     }
 }
