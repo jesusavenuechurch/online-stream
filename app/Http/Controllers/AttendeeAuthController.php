@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendee;
+use App\Models\Attendance;
 use App\Models\StreamEvent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class AttendeeAuthController extends Controller
 {
@@ -42,6 +44,10 @@ class AttendeeAuthController extends Controller
 
         if ($liveEvent) {
             Session::put('event_id', $liveEvent->id);
+            
+            // LOG ATTENDANCE IMMEDIATELY
+            $this->logAttendance($liveEvent, $attendee, $request);
+            
             return response()->json([
                 'success' => true,
                 'is_live' => true,
@@ -85,7 +91,7 @@ class AttendeeAuthController extends Controller
             'phone'       => $request->phone,
             'zone_id'     => $request->zone_id,
             'group_id'    => $request->group_id,
-            'type'        => 'member', // Hardcoded as member
+            'type'        => 'member',
         ]);
 
         Session::put('attendee_id', $attendee->id);
@@ -94,6 +100,10 @@ class AttendeeAuthController extends Controller
 
         if ($liveEvent) {
             Session::put('event_id', $liveEvent->id);
+            
+            // LOG ATTENDANCE IMMEDIATELY
+            $this->logAttendance($liveEvent, $attendee, $request);
+            
             return response()->json([
                 'success' => true,
                 'is_live' => true,
@@ -134,6 +144,9 @@ class AttendeeAuthController extends Controller
         Session::put('attendee_id', $attendee->id);
         Session::put('event_id', $event->id);
 
+        // LOG ATTENDANCE IMMEDIATELY
+        $this->logAttendance($event, $attendee, $request);
+
         $isLive = ($event->status === 'live' || $event->recording_path);
 
         return response()->json([
@@ -158,7 +171,6 @@ class AttendeeAuthController extends Controller
             'phone'      => 'required|string|max:20',
             'zone_id'    => 'required|exists:zones,id',
             'group_id'   => 'required|exists:groups,id',
-            // REMOVED 'type' => 'required' here because the form doesn't send it
         ]);
 
         if ($validator->fails()) {
@@ -174,11 +186,14 @@ class AttendeeAuthController extends Controller
             'phone'       => $request->phone,
             'zone_id'     => $request->zone_id,
             'group_id'    => $request->group_id,
-            'type'        => 'member', // Defaulting to member
+            'type'        => 'member',
         ]);
 
         Session::put('attendee_id', $attendee->id);
         Session::put('event_id', $event->id);
+
+        // LOG ATTENDANCE IMMEDIATELY
+        $this->logAttendance($event, $attendee, $request);
 
         $isLive = ($event->status === 'live' || $event->recording_path);
 
@@ -188,5 +203,60 @@ class AttendeeAuthController extends Controller
             'redirect' => $isLive ? route('stream.show', $event->id) : null,
             'message' => $isLive ? 'Joining...' : 'Registration Successful!'
         ]);
+    }
+
+    /**
+     * Log attendance - called immediately on successful login/registration
+     */
+    private function logAttendance(StreamEvent $event, Attendee $attendee, Request $request)
+    {
+        try {
+            // Check if already has active attendance
+            $existing = Attendance::where('event_id', $event->id)
+                ->where('attendee_id', $attendee->id)
+                ->whereNull('left_at')
+                ->first();
+
+            if ($existing) {
+                // Update existing
+                $existing->update([
+                    'last_ping' => now(),
+                    'session_id' => Session::getId(),
+                ]);
+
+                Log::info('Attendance updated on login', [
+                    'attendance_id' => $existing->id,
+                    'event_id' => $event->id,
+                    'attendee_id' => $attendee->id,
+                    'attendee_name' => $attendee->full_name,
+                ]);
+            } else {
+                // Create new
+                $attendance = Attendance::create([
+                    'event_id' => $event->id,
+                    'attendee_id' => $attendee->id,
+                    'joined_at' => now(),
+                    'last_ping' => now(),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'session_id' => Session::getId(),
+                ]);
+
+                Log::info('Attendance created on login', [
+                    'attendance_id' => $attendance->id,
+                    'event_id' => $event->id,
+                    'attendee_id' => $attendee->id,
+                    'attendee_name' => $attendee->full_name,
+                    'joined_at' => $attendance->joined_at,
+                ]);
+            }
+        } catch (\Exception $e) {
+            // Log error but don't fail the login
+            Log::error('Failed to log attendance', [
+                'error' => $e->getMessage(),
+                'event_id' => $event->id,
+                'attendee_id' => $attendee->id,
+            ]);
+        }
     }
 }
