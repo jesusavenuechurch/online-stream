@@ -17,9 +17,8 @@ class StreamController extends Controller
     public function show(Request $request, StreamEvent $event)
     {
         $attendeeId = Session::get('attendee_id');
-        $sessionEventId = Session::get('event_id');
 
-        // 1. Check if user is authenticated for ANY event
+        // 1. Check if user is authenticated
         if (!$attendeeId) {
             return view('stream.auth', compact('event'));
         }
@@ -32,11 +31,10 @@ class StreamController extends Controller
             return redirect('/')->with('error', 'Access denied.');
         }
 
-        // 3. **SMART REDIRECT: Always show the LIVE event if one exists**
+        // 3. Smart redirect to live event
         $liveEvent = StreamEvent::where('status', 'live')->first();
         
         if ($liveEvent && $liveEvent->id !== $event->id) {
-            // There's a different live event - redirect to it
             Session::put('event_id', $liveEvent->id);
             Log::info('Redirecting to live event', [
                 'from_event' => $event->id,
@@ -52,19 +50,19 @@ class StreamController extends Controller
             return redirect('/')->with('error', 'This stream is for pastors only.');
         }
 
-        // 5. Update session to this event
+        // 5. Update session
         Session::put('event_id', $event->id);
 
-        // 6. Record attendance (improved to prevent duplicates)
+        // 6. ALWAYS CREATE NEW ATTENDANCE RECORD
         $this->recordAttendance($event, $attendee, $request);
 
-        // 7. Get stream URL
+        // 7. Get stream URL (not used for external stream, but kept for compatibility)
         $streamUrl = $this->getStreamUrl($event);
         
         Log::info('Stream page loaded', [
             'event_id' => $event->id,
             'attendee_id' => $attendee->id,
-            'stream_url' => $streamUrl,
+            'attendee_name' => $attendee->full_name,
             'event_status' => $event->status,
         ]);
 
@@ -72,42 +70,32 @@ class StreamController extends Controller
     }
 
     /**
-     * Record attendance with duplicate prevention
+     * ALWAYS create new attendance record (no duplicate checking)
      */
     private function recordAttendance(StreamEvent $event, Attendee $attendee, Request $request)
     {
-        $sessionId = Session::getId();
-        
-        // Check for existing active attendance
-        $existingAttendance = Attendance::where('event_id', $event->id)
-            ->where('attendee_id', $attendee->id)
-            ->whereNull('left_at')
-            ->first();
-        
-        if ($existingAttendance) {
-            // Update existing record
-            $existingAttendance->update([
-                'last_ping' => now(),
-                'session_id' => $sessionId, // Update session ID in case it changed
-            ]);
-            
-            Log::info('Updated existing attendance', [
-                'attendance_id' => $existingAttendance->id,
-                'attendee_id' => $attendee->id,
-            ]);
-        } else {
-            // Create new attendance record
-            Attendance::create([
+        try {
+            // ALWAYS CREATE NEW - More data is better!
+            $attendance = Attendance::create([
                 'event_id' => $event->id,
                 'attendee_id' => $attendee->id,
                 'joined_at' => now(),
                 'last_ping' => now(),
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
-                'session_id' => $sessionId,
+                'session_id' => Session::getId(),
             ]);
             
-            Log::info('Created new attendance', [
+            Log::info('New attendance created', [
+                'attendance_id' => $attendance->id,
+                'event_id' => $event->id,
+                'attendee_id' => $attendee->id,
+                'attendee_name' => $attendee->full_name,
+                'joined_at' => $attendance->joined_at,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to create attendance', [
+                'error' => $e->getMessage(),
                 'event_id' => $event->id,
                 'attendee_id' => $attendee->id,
             ]);
@@ -120,10 +108,13 @@ class StreamController extends Controller
     public function heartbeat(Request $request, StreamEvent $event)
     {
         $attendeeId = Session::get('attendee_id');
+        $sessionId = Session::getId();
 
         if ($attendeeId) {
+            // Update the most recent attendance for this user/event/session
             $updated = Attendance::where('event_id', $event->id)
                 ->where('attendee_id', $attendeeId)
+                ->where('session_id', $sessionId)
                 ->whereNull('left_at')
                 ->update(['last_ping' => now()]);
             
@@ -133,6 +124,7 @@ class StreamController extends Controller
                 Log::warning('Heartbeat failed: no active attendance found', [
                     'event_id' => $event->id,
                     'attendee_id' => $attendeeId,
+                    'session_id' => $sessionId,
                 ]);
                 return response()->json(['status' => 'not_found'], 404);
             }
@@ -147,10 +139,12 @@ class StreamController extends Controller
     public function leave(Request $request, StreamEvent $event)
     {
         $attendeeId = Session::get('attendee_id');
+        $sessionId = Session::getId();
 
         if ($attendeeId) {
             $updated = Attendance::where('event_id', $event->id)
                 ->where('attendee_id', $attendeeId)
+                ->where('session_id', $sessionId)
                 ->whereNull('left_at')
                 ->update(['left_at' => now()]);
             
@@ -171,39 +165,15 @@ class StreamController extends Controller
      */
     private function getStreamUrl(StreamEvent $event): ?string
     {
-        // Priority 1: Live stream
+        // This is kept for compatibility but not used with external stream
         if ($event->isLive()) {
             $settings = \App\Models\StreamSettings::current();
             if ($settings && $settings->stream_key) {
-                $hlsUrl = asset('storage/hls/' . $settings->stream_key . '.m3u8');
-                
-                // Verify HLS file exists
-                $hlsPath = storage_path('app/public/hls/' . $settings->stream_key . '.m3u8');
-                if (!file_exists($hlsPath)) {
-                    Log::warning('HLS file not found', [
-                        'expected_path' => $hlsPath,
-                        'event_id' => $event->id,
-                    ]);
-                    return null;
-                }
-                
-                return $hlsUrl;
+                return asset('storage/hls/' . $settings->stream_key . '.m3u8');
             }
         }
         
-        // Priority 2: Recording (for ended events)
         if ($event->recording_path) {
-            $recordingPath = storage_path('app/public/' . $event->recording_path);
-            
-            // Verify recording exists
-            if (!file_exists($recordingPath)) {
-                Log::warning('Recording file not found', [
-                    'expected_path' => $recordingPath,
-                    'event_id' => $event->id,
-                ]);
-                return null;
-            }
-            
             return asset('storage/' . $event->recording_path);
         }
         
