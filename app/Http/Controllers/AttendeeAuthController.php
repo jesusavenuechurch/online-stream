@@ -36,6 +36,20 @@ class AttendeeAuthController extends Controller
             ], 404);
         }
 
+        // Prevent multiple logins on same account
+        $activeSession = \Illuminate\Support\Facades\DB::table('sessions')
+            ->get()
+            ->filter(function ($session) use ($attendee) {
+                $data = unserialize(base64_decode($session->payload));
+                return isset($data['attendee_id']) && $data['attendee_id'] === $attendee->id;
+            });
+
+        if ($activeSession->count() > 0) {
+            return response()->json([
+                'message' => 'This account is already active on another device.'
+            ], 403);
+        }
+
         Session::put('attendee_id', $attendee->id);
 
         $liveEvent = StreamEvent::where('status', 'live')->first();
